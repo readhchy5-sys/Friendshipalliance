@@ -1,0 +1,640 @@
+# Pasted text
+
+Pasted: 2026-09-30T11:15:38.279Z
+
+---
+
+<!DOCTYPE html><html lang="bn"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FRIENDSHIP v19.9 — Direct Admin Login + Transaction Date/Time</title>
+<meta name="theme-color" content="#4338ca">
+<meta name="description" content="Friendship Alliance member, contribution, share and transaction dashboard.">
+<script src="https://cdn.tailwindcss.com"></script>
+
+</head><body id="body" style="background:#0f0f14;color:white">
+<script>
+function applyTheme(theme){
+var b=document.getElementById('body');
+if(theme==='light'){b.style.background='white';b.style.color='black';}
+else{b.style.background='#0f0f14';b.style.color='white';}
+}
+function toggleTheme(){
+var next=localStorage.getItem('theme')==='light'?'dark':'light';
+localStorage.setItem('theme',next);applyTheme(next);
+}
+function switchTab(t){
+var target=document.getElementById('sec-'+t);
+if(!target)return;
+document.querySelectorAll('[id^=sec-]').forEach(function(e){e.style.display='none';});
+target.style.display='block';
+document.querySelectorAll('#nav button').forEach(function(x){x.classList.remove('tabActive');});
+var tab=document.getElementById('t-'+t);if(tab)tab.classList.add('tabActive');
+}
+function isAdmin(){
+return localStorage.getItem('fa_admin')==='true';
+}
+function requireAdmin(action){
+if(isAdmin())return true;
+alert('শুধু Admin '+(action||'এই কাজ')+' করতে পারবে। সাধারণ User শুধু দেখতে পারবে।');
+return false;
+}
+function showUserLogin(message){
+localStorage.removeItem('fa_user');
+var modal=document.getElementById('userLoginScreen');
+if(modal)modal.style.display='flex';
+var status=document.getElementById('userLoginStatus');
+if(status)status.innerText=message||'';
+setTimeout(function(){var input=document.getElementById('userLoginId');if(input)input.focus();},50);
+}
+function unlockDashboard(){
+localStorage.setItem('fa_user','true');
+var modal=document.getElementById('userLoginScreen');
+if(modal)modal.style.display='none';
+switchTab('dash');
+window.scrollTo(0,0);
+}
+function doUserLogin(){
+var uid=document.getElementById('userLoginId').value.trim();
+var pass=document.getElementById('userLoginPass').value;
+var status=document.getElementById('userLoginStatus');
+if(!uid||!pass){status.innerText='User ID এবং Password লিখুন';return;}
+if(uid===window.curUserId&&pass===window.curUserPass){
+status.innerText='✅ Login successful';
+document.getElementById('userLoginPass').value='';
+unlockDashboard();
+}else{
+status.innerText='❌ ভুল User ID অথবা Password';
+document.getElementById('userLoginPass').value='';
+document.getElementById('userLoginPass').focus();
+}
+}
+function doDirectAdminLogin(){
+var pass=document.getElementById('directAdminPass').value;
+var status=document.getElementById('directAdminStatus');
+if(!pass){status.innerText='Admin Password লিখুন';return;}
+if(pass===window.curPass){
+localStorage.setItem('fa_user','true');
+localStorage.setItem('fa_admin','true');
+document.getElementById('directAdminPass').value='';
+status.innerText='✅ Admin login successful';
+var modal=document.getElementById('userLoginScreen');
+if(modal)modal.style.display='none';
+render();
+switchTab('settings');
+window.scrollTo(0,0);
+}else{
+status.innerText='❌ ভুল Admin Password';
+document.getElementById('directAdminPass').value='';
+document.getElementById('directAdminPass').focus();
+}
+}
+function handleDirectAdminKey(event){if(event.key==='Enter')doDirectAdminLogin();}
+function userLogout(){
+localStorage.removeItem('fa_user');
+localStorage.removeItem('fa_admin');
+location.reload();
+}
+function handleLoginKey(event){if(event.key==='Enter')doUserLogin();}
+function changeUserLogin(){
+if(!requireAdmin('User Login পরিবর্তন'))return;
+var uid=document.getElementById('newUserId').value.trim();
+var pass=document.getElementById('newUserPass').value;
+var confirm=document.getElementById('confirmUserPass').value;
+if(uid.length<3){alert('User ID কমপক্ষে 3 অক্ষরের হতে হবে');return;}
+if(pass.length<6){alert('Password কমপক্ষে 6 অক্ষরের হতে হবে');return;}
+if(pass!==confirm){alert('Password মিলছে না');return;}
+window.curUserId=uid;window.curUserPass=pass;
+if(db){
+db.ref('FA/settings/userLogin').set({userId:uid,userPass:pass}).then(function(){
+alert('✅ User Login পরিবর্তন হয়েছে');
+document.getElementById('newUserPass').value='';
+document.getElementById('confirmUserPass').value='';
+}).catch(function(err){alert('Save failed: '+err.message);});
+}else{
+localStorage.setItem('fa_user_id',uid);
+localStorage.setItem('fa_user_pass',pass);
+alert('✅ User Login এই browser-এ পরিবর্তন হয়েছে');
+}
+}
+function pad2(value){return String(value).padStart(2,'0');}
+function localDateValue(date){
+date=date||new Date();
+return date.getFullYear()+'-'+pad2(date.getMonth()+1)+'-'+pad2(date.getDate());
+}
+function localTimeValue(date){
+date=date||new Date();
+return pad2(date.getHours())+':'+pad2(date.getMinutes());
+}
+function txDateValue(t){
+if(t&&/^\d{4}-\d{2}-\d{2}$/.test(String(t.transactionDate||'')))return String(t.transactionDate);
+var numericId=Number(t&&t.id);
+if(Number.isFinite(numericId)&&numericId>100000000000){
+var d=new Date(numericId);
+if(!isNaN(d.getTime()))return localDateValue(d);
+}
+return '';
+}
+function txTimeValue(t){
+if(t&&/^\d{2}:\d{2}/.test(String(t.transactionTime||'')))return String(t.transactionTime).slice(0,5);
+var numericId=Number(t&&t.id);
+if(Number.isFinite(numericId)&&numericId>100000000000){
+var d=new Date(numericId);
+if(!isNaN(d.getTime()))return localTimeValue(d);
+}
+return '';
+}
+function txSortValue(t){
+if(t&&Number.isFinite(Number(t.transactionTimestamp)))return Number(t.transactionTimestamp);
+var date=txDateValue(t),time=txTimeValue(t)||'00:00';
+if(date){
+var parsed=new Date(date+'T'+time);
+if(!isNaN(parsed.getTime()))return parsed.getTime();
+}
+return Number(t&&t.id)||0;
+}
+function formatTxDateTime(t){
+var date=txDateValue(t),time=txTimeValue(t);
+if(!date&&!time)return 'তারিখ/সময় নেই';
+return (date||'—')+(time?' '+time:'');
+}
+function openTransactionModal(){
+if(!requireAdmin('Transaction যোগ'))return;
+if(!members.length){alert('আগে অন্তত একজন Member যোগ করুন');return;}
+var now=new Date();
+document.getElementById('tDate').value=localDateValue(now);
+document.getElementById('tTime').value=localTimeValue(now);
+document.getElementById('tAmt').value='';
+document.getElementById('tModal').style.display='flex';
+setTimeout(function(){document.getElementById('tAmt').focus();},50);
+}
+function openM(id){if(!requireAdmin('Member যোগ বা Edit'))return;document.getElementById(id).style.display='flex';}
+function closeM(id){document.getElementById(id).style.display='none';}
+function adminLogin(){document.getElementById('loginModal').style.display='flex';}
+function doLogin(){
+var p=document.getElementById('loginPass').value;
+if(p===window.curPass){
+localStorage.setItem('fa_admin','true');
+document.getElementById('loginPass').value='';
+closeM('loginModal');
+render();
+switchTab('dash');
+}else alert('ভুল পাসওয়ার্ড!');
+}
+function adminLogout(){localStorage.removeItem('fa_admin');render();switchTab('dash');}
+function backupData(){if(!requireAdmin('Backup Download'))return;var blob=new Blob([JSON.stringify({members:members,transactions:trans},null,2)],{type:'application/json'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='Backup.json';a.click();}
+
+function downloadPDF() {
+    if (!window.reportDataState ||
+        !window.reportDataState.members ||
+        !window.reportDataState.transactions) {
+        alert('Report data has not finished loading. Please check your connection and database permissions, then try again.');
+        return;
+    }
+
+    function escapeHTML(value) {
+        return String(value == null ? '' : value).replace(/[&<>"']/g, function(ch) {
+            return {'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[ch];
+        });
+    }
+    function number(value) {
+        var result = Number(value);
+        return Number.isFinite(result) ? result : 0;
+    }
+    function money(value) {
+        return '৳' + number(value).toLocaleString('en-US', {
+            minimumFractionDigits: 2, maximumFractionDigits: 2
+        });
+    }
+    function monthIndex(value) {
+        if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) return NaN;
+        var parts = value.split('-');
+        return Number(parts[0]) * 12 + Number(parts[1]) - 1;
+    }
+
+    var start = document.getElementById('sM').value;
+    var end = document.getElementById('cM').value;
+    var months = monthIndex(end) - monthIndex(start) + 1;
+    if (!Number.isFinite(months) || months < 1) {
+        alert('Please select a valid start and end month. The end cannot be before the start.');
+        return;
+    }
+
+    // Build from ALL loaded records, never from the dashboard's visible rows.
+    // Copy only the financial fields required for this report.
+    var memberRows = members.filter(Boolean).map(function(m) {
+        return {
+            id: m.id, name: m.name, sharePercent: m.sharePercent,
+            monthly: m.monthly
+        };
+    });
+    var transactions = trans.filter(Boolean).map(function(t) {
+        return {
+            id: t.id, memberId: t.memberId, memberName: t.memberName,
+            type: t.type, amount: t.amount,
+            transactionDate: txDateValue(t), transactionTime: txTimeValue(t),
+            transactionTimestamp: txSortValue(t)
+        };
+    });
+
+    var deposits = 0, expenses = 0, unknownTypes = 0;
+    var paidByMember = Object.create(null);
+    transactions.forEach(function(t) {
+        var amount = number(t.amount);
+        if (t.type === 'জমা') {
+            deposits += amount;
+            var key = String(t.memberId);
+            paidByMember[key] = (paidByMember[key] || 0) + amount;
+        } else if (t.type === 'খরচ') {
+            expenses += amount;
+        } else {
+            unknownTypes += 1;
+        }
+    });
+
+    var totalShare = 0, expectedTotal = 0, dueTotal = 0, advanceTotal = 0;
+    var memberNames = Object.create(null);
+    var memberTable = memberRows.map(function(m, index) {
+        memberNames[String(m.id)] = m.name;
+        var monthly = number(m.monthly);
+        if (monthly <= 0) monthly = 3000; // Existing application's default.
+        var share = number(m.sharePercent);
+        var paid = paidByMember[String(m.id)] || 0;
+        var expected = monthly * months;
+        var balance = Math.round((expected - paid) * 100) / 100;
+        var due = Math.max(balance, 0);
+        var advance = Math.max(-balance, 0);
+        var status = balance > 0 ? 'বকেয়া / Due' :
+                     balance < 0 ? 'অগ্রিম / Advance' : 'পরিশোধিত / Clear';
+        totalShare += share;
+        expectedTotal += expected;
+        dueTotal += due;
+        advanceTotal += advance;
+        return '<tr><td>' + (index + 1) + '</td><td>' + escapeHTML(m.name) +
+            '</td><td class="num">' + share.toFixed(2) +
+            '%</td><td class="num">' + money(monthly) +
+            '</td><td class="num">' + money(expected) +
+            '</td><td class="num">' + money(paid) +
+            '</td><td class="num">' + money(due) +
+            '</td><td class="num">' + money(advance) +
+            '</td><td>' + status + '</td></tr>';
+    }).join('');
+
+    transactions.sort(function(a,b){return number(a.transactionTimestamp)-number(b.transactionTimestamp);});
+    var unmatched = 0;
+    var transactionTable = transactions.map(function(t, index) {
+        var known = Object.prototype.hasOwnProperty.call(memberNames, String(t.memberId));
+        if (!known) unmatched += 1;
+        var name = t.memberName || (known ? memberNames[String(t.memberId)] : 'Unknown member');
+        return '<tr><td>' + (index + 1) + '</td><td>' + escapeHTML(t.transactionDate || '—') +
+            '</td><td>' + escapeHTML(t.transactionTime || '—') +
+            '</td><td>' + escapeHTML(t.id) +
+            '</td><td>' + escapeHTML(name) + (known ? '' : ' [not in current member list]') +
+            '</td><td>' + escapeHTML(t.type) +
+            '</td><td class="num">' + money(t.amount) + '</td></tr>';
+    }).join('');
+
+    var warnings = '';
+    if (Math.abs(totalShare - 100) > 0.005) {
+        warnings += '<p class="warning">Total assigned share is ' +
+            totalShare.toFixed(2) + '%, not 100%.</p>';
+    }
+    if (unmatched) {
+        warnings += '<p class="warning">' + unmatched +
+            ' transaction(s) refer to members not in the current member list. They remain in the ledger and financial totals, but not in current-member balances.</p>';
+    }
+    if (unknownTypes) {
+        warnings += '<p class="warning">' + unknownTypes +
+            ' transaction(s) have an unrecognized type. They are listed below but excluded from deposit/expense totals.</p>';
+    }
+
+    var report = '<!DOCTYPE html><html lang="bn"><head><meta charset="UTF-8">' +
+        '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+        '<title>FRIENDSHIP - Full Financial Report</title><style>' +
+        '@page{size:A4 landscape;margin:12mm}' +
+        '*{box-sizing:border-box}body{margin:20px;background:#fff;color:#111;' +
+        'font-family:"Noto Sans Bengali","Nirmala UI","Vrinda",Arial,sans-serif;font-size:12px;line-height:1.5}' +
+        'h1{font-size:22px;margin:0}h2{font-size:16px;margin:24px 0 8px;break-after:avoid}' +
+        'p{margin:6px 0}.toolbar{padding:12px;background:#eef2ff;border:1px solid #c7d2fe;margin-bottom:20px}' +
+        'button{padding:10px 16px;cursor:pointer;background:#166534;color:#fff;border:0;border-radius:4px;font:inherit}' +
+        'button:focus-visible{outline:3px solid #2563eb;outline-offset:3px}' +
+        'table{width:100%;border-collapse:collapse;margin:8px 0 18px;table-layout:fixed}' +
+        'th,td{border:1px solid #999;padding:6px;vertical-align:top;overflow-wrap:anywhere}' +
+        'th{background:#eee;text-align:left;font-weight:bold}.num{text-align:right}' +
+        'thead{display:table-header-group}tr{break-inside:avoid;page-break-inside:avoid}' +
+        '.note{font-size:11px;color:#333}.warning{border-left:3px solid #9a6700;padding:6px 10px}' +
+        '.summary th{width:18%}.summary td{width:32%}.members{font-size:11px}' +
+        '.end{margin-top:20px;border-top:2px solid #333;padding-top:8px;font-weight:bold}' +
+        '@media print{body{margin:0}.toolbar{display:none!important}' +
+        'table{overflow:visible}th{background:#eee!important;print-color-adjust:exact}' +
+        'a{color:inherit;text-decoration:none}}' +
+        '</style></head><body>' +
+        '<div class="toolbar"><button type="button" id="printReport">Print / Save as PDF</button>' +
+        '<p>Select <strong>Save as PDF</strong>, <strong>All pages</strong>, and <strong>Landscape</strong> in the print dialog. This report contains all loaded members and transactions.</p></div>' +
+        '<h1>FRIENDSHIP ALLIANCE</h1><p><strong>পূর্ণ আর্থিক প্রতিবেদন / Full Financial Report</strong></p>' +
+        '<p>Generated: ' + escapeHTML(new Date().toLocaleString()) + '</p>' +
+        '<p>Contribution calculation: ' + escapeHTML(start) + ' to ' + escapeHTML(end) +
+        ' (' + months + ' months, inclusive)</p>' +
+        '<p class="note"><strong>Scope:</strong> Deposits and expenses include all loaded transactions, not only the selected months. Each new transaction stores its selected date and time. For older records created before this feature, the report derives a best-effort date/time from the numeric record ID when possible. The selected months determine expected contributions only; current monthly rates are applied to every month. Expenses do not reduce a member’s contribution payments. Non-positive or missing monthly rates use the application default of ৳3,000.</p>' +
+        warnings +
+        '<h2>সারসংক্ষেপ / Summary</h2><table class="summary"><tbody>' +
+        '<tr><th>Members</th><td>' + memberRows.length + '</td><th>Transactions</th><td>' + transactions.length + '</td></tr>' +
+        '<tr><th>Total share</th><td>' + totalShare.toFixed(2) + '%</td><th>Expected contributions</th><td>' + money(expectedTotal) + '</td></tr>' +
+        '<tr><th>Total deposits</th><td>' + money(deposits) + '</td><th>Total expenses</th><td>' + money(expenses) + '</td></tr>' +
+        '<tr><th>Net recorded cash</th><td>' + money(deposits - expenses) + '</td><th>Current-member dues</th><td>' + money(dueTotal) + '</td></tr>' +
+        '<tr><th>Current-member advances</th><td>' + money(advanceTotal) + '</td><th>Currency</th><td>BDT / ৳</td></tr></tbody></table>' +
+        '<p class="note">Net recorded cash = recorded deposits minus recorded expenses; no opening balance is included. Share percentage is an allocation, not realized profit. The temporary Profit calculator is not stored and is not included here.</p>' +
+        '<h2>সদস্য বিবরণ / All Members (' + memberRows.length + ')</h2>' +
+        '<table class="members"><colgroup><col style="width:4%"><col style="width:20%">' +
+        '<col style="width:7%"><col style="width:10%"><col style="width:12%">' +
+        '<col style="width:12%"><col style="width:11%"><col style="width:11%"><col style="width:13%"></colgroup>' +
+        '<thead><tr><th>#</th><th>নাম / Name</th><th>Share %</th><th>Monthly</th>' +
+        '<th>Expected</th><th>Paid</th><th>Due</th><th>Advance</th><th>Status</th></tr></thead><tbody>' +
+        (memberTable || '<tr><td colspan="9">No members recorded.</td></tr>') +
+        '</tbody></table>' +
+        '<h2>জমা / খরচ — All Transactions (' + transactions.length + ')</h2>' +
+        '<table><colgroup><col style="width:4%"><col style="width:11%"><col style="width:8%"><col style="width:17%"><col style="width:31%">' +
+        '<col style="width:12%"><col style="width:17%"></colgroup>' +
+        '<thead><tr><th>#</th><th>Date</th><th>Time</th><th>Record ID</th><th>Member</th><th>Type</th><th>Amount (BDT)</th></tr></thead><tbody>' +
+        (transactionTable || '<tr><td colspan="7">No transactions recorded.</td></tr>') +
+        '</tbody></table><p class="end">End of report — ' + memberRows.length +
+        ' members; ' + transactions.length + ' transactions.</p>' +
+        '<p class="note">Phone numbers, member photos, NID images, and chat messages are intentionally excluded from this financial report.</p>' +
+        '</body></html>';
+
+    // Open synchronously from the Report click so browsers allow the new tab.
+    var reportWindow = window.open('', '_blank');
+    if (!reportWindow) {
+        alert('Please allow pop-ups for this page, then click Report again.');
+        return;
+    }
+    reportWindow.document.open();
+    reportWindow.document.write(report);
+    reportWindow.document.close();
+    reportWindow.document.getElementById('printReport').addEventListener('click', function() {
+        function printReady() { reportWindow.focus(); reportWindow.print(); }
+        if (reportWindow.document.fonts && reportWindow.document.fonts.ready) {
+            reportWindow.document.fonts.ready.then(printReady);
+        } else {
+            printReady();
+        }
+    });
+}
+
+function showProfit(){
+var totShare=0; members.forEach(function(m){ totShare+=parseFloat(m.sharePercent||0); });
+if(totShare===0){ alert('এডমিন এখনো কারো শেয়ার % নির্ধারণ করেনি! Members > Edit থেকে শেয়ার % দিন'); return; }
+var profitInput=prompt('মোট লাভ কত টাকা? (যেমন 50000)', '50000'); if(!profitInput) return;
+var profit=parseInt(profitInput);
+var html='মোট শেয়ার বণ্টন: '+totShare.toFixed(2)+'% (100% হওয়া উচিত)<br>মোট লাভ: ৳'+profit+'<br><br><table class="w-full text-[11px]"><tr class="bg-[#2a2a35]"><th class="p-2 text-left">নাম</th><th>শেয়ার %</th><th>লাভ ৳</th></tr>';
+members.forEach(function(m){
+var share=parseFloat(m.sharePercent||0);
+var profitShare=Math.round(profit*share/100);
+html+='<tr class="border-t border-slate-700"><td class="p-2">'+m.name+'</td><td>'+share+'%</td><td class="font-bold text-emerald-400">৳'+profitShare+'</td></tr>';
+});
+html+='</table><p class="text-[10px] opacity-60 mt-2">* শেয়ার % এডমিন দ্বারা নির্ধারিত</p>';
+document.getElementById('profitText').innerHTML=html;
+document.getElementById('profitModal').style.display='flex';
+}
+function whatsappReminder(ph,name,m,amt){window.open('https://wa.me/88'+ph+'?text='+encodeURIComponent('ভাই '+name+', '+m+' মাস বকেয়া ৳'+amt), '_blank');}
+function editMember(id){
+if(!requireAdmin('Member Edit'))return;
+var m=null; for(var i=0;i<members.length;i++){ if(String(members[i].id)===String(id)){ m=members[i]; break; } }
+if(!m) return;
+document.getElementById('editId').value=m.id;
+document.getElementById('mName').value=m.name;
+document.getElementById('mPhone').value=m.phone;
+document.getElementById('mMonthly').value=m.monthly||3000;
+document.getElementById('mShare').value=m.sharePercent||'';
+document.getElementById('pData').value=m.photo||'';
+document.getElementById('nData').value=m.nidPhoto||'';
+if(m.photo){ document.getElementById('pPrev').src=m.photo; document.getElementById('pPrev').style.display='block'; }else{ document.getElementById('pPrev').style.display='none'; }
+document.getElementById('mModal').style.display='flex';
+document.getElementById('saveStatus').innerText='✏️ Admin Edit Mode - শেয়ার % নির্ধারণ করুন';
+}
+</script>
+<style>
+.tabActive{border-bottom:3px solid #f59e0b;color:#f59e0b}
+.card{background:#1e1e2a;border:1px solid #333}
+button,input,select{outline-offset:2px} input[type=date],input[type=time]{color-scheme:dark}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #f59e0b}
+.login-panel{background:linear-gradient(145deg,#1e1e2a,#111827);box-shadow:0 24px 80px rgba(0,0,0,.55)}
+body[style*="background: white"] .card{background:#f8fafc;border-color:#cbd5e1}
+body[style*="background: white"] #theory,
+body[style*="background: white"] #mList{color:#111827}
+</style>
+<div id="userLoginScreen" role="dialog" aria-modal="true" aria-labelledby="userLoginTitle" style="display:flex" class="fixed inset-0 z-[1000] bg-[#09090f] items-center justify-center p-4">
+<div class="login-panel w-full max-w-sm rounded-2xl border border-indigo-500 p-6 text-white">
+<div class="text-center">
+<div class="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600 text-2xl font-bold">FA</div>
+<h1 id="userLoginTitle" class="text-xl font-bold">FRIENDSHIP ALLIANCE</h1>
+<p class="mt-1 text-xs text-slate-400">Secure Dashboard Login</p>
+</div>
+<label for="userLoginId" class="mt-6 block text-xs font-bold">User ID</label>
+<input id="userLoginId" autocomplete="username" onkeydown="handleLoginKey(event)" class="mt-1 w-full rounded-xl border border-slate-600 bg-black p-3 text-sm text-white" placeholder="Enter User ID">
+<label for="userLoginPass" class="mt-3 block text-xs font-bold">Password</label>
+<input id="userLoginPass" type="password" autocomplete="current-password" onkeydown="handleLoginKey(event)" class="mt-1 w-full rounded-xl border border-slate-600 bg-black p-3 text-sm text-white" placeholder="Enter Password">
+<button type="button" onclick="doUserLogin()" class="mt-4 w-full rounded-xl bg-indigo-600 py-3 text-sm font-bold hover:bg-indigo-500">Login → Dashboard</button>
+<p id="userLoginStatus" aria-live="polite" class="mt-3 min-h-5 text-center text-xs text-amber-300"></p>
+<div class="my-4 flex items-center gap-2 text-[10px] text-slate-500"><span class="h-px flex-1 bg-slate-700"></span><span>OR DIRECT ADMIN LOGIN</span><span class="h-px flex-1 bg-slate-700"></span></div>
+<label for="directAdminPass" class="block text-xs font-bold text-amber-300">Admin Password</label>
+<input id="directAdminPass" type="password" autocomplete="current-password" onkeydown="handleDirectAdminKey(event)" class="mt-1 w-full rounded-xl border border-amber-600 bg-black p-3 text-sm text-white" placeholder="Enter Admin Password">
+<button type="button" onclick="doDirectAdminLogin()" class="mt-3 w-full rounded-xl bg-amber-400 py-3 text-sm font-bold text-black hover:bg-amber-300">Direct Admin Login → Settings</button>
+<p id="directAdminStatus" aria-live="polite" class="mt-2 min-h-5 text-center text-xs text-amber-300"></p>
+<p class="mt-4 text-center text-[10px] text-slate-500">Authorized users only</p>
+</div>
+</div>
+<header class="bg-indigo-700 p-3 flex justify-between items-center sticky top-0 z-50"><div><h1 class="font-bold text-[13px]">FRIENDSHIP ALLIANCE</h1><p class="text-[9px]">v19.9 DIRECT ADMIN + TRANSACTION DATE/TIME</p></div><div class="flex gap-1 items-center flex-wrap"><button onclick="toggleTheme()" class="bg-black border text-white px-2 py-1 rounded-full text-[10px]">🌗 Theme</button><button data-admin-only="true" onclick="backupData()" class="bg-slate-700 text-white px-2 py-1 rounded-full text-[10px]">💾 Backup</button><button onclick="showProfit()" class="bg-amber-500 text-black px-2 py-1 rounded-full text-[10px] font-bold">📊 Profit %</button><button onclick="downloadPDF()" class="bg-emerald-600 text-white px-2 py-1 rounded-full text-[10px]">📄 Report</button><span id="roleBadge" class="bg-white/20 px-2 py-1 rounded-full text-[9px]">View</span><button onclick="adminLogin()" id="loginBtn" class="bg-amber-400 text-black px-2 py-1 rounded-full text-[10px] font-bold">Admin</button><button onclick="adminLogout()" id="logoutBtn" class="hidden bg-red-500 text-white px-2 py-1 rounded-full text-[10px]">Admin Logout</button><button onclick="userLogout()" class="bg-slate-900 border border-white/30 text-white px-2 py-1 rounded-full text-[10px]">User Logout</button></div></header>
+<nav id="nav" class="bg-[#1a1a25] flex gap-3 p-2 overflow-auto text-[11px] font-bold sticky top-[60px] z-40 border-b border-slate-700"><button id="t-dash" onclick="switchTab('dash')" class="tabActive p-2">Dashboard</button><button id="t-members" onclick="switchTab('members')" class="p-2">Members - Share %</button><button id="t-money" onclick="switchTab('money')" class="p-2">জমা/খরচ</button><button id="t-intercom" onclick="switchTab('intercom')" class="p-2 text-amber-400">Intercom</button><button id="t-settings" onclick="switchTab('settings')" class="p-2">Settings</button></nav>
+<div class="max-w-6xl mx-auto p-2 space-y-3"><div id="sec-dash"><div class="grid grid-cols-3 gap-2"><div class="card p-3 rounded-xl"><p class="text-[10px] opacity-60">মোট সদস্য</p><p id="dM" class="text-2xl font-bold">0</p></div><div class="card p-3 rounded-xl"><p class="text-[10px] opacity-60">মোট জমা</p><p id="dJ" class="text-2xl font-bold text-emerald-400">৳0</p></div><div class="card p-3 rounded-xl border-amber-700"><p class="text-[10px] opacity-60">মোট শেয়ার বণ্টন</p><p id="dShare" class="text-2xl font-bold text-amber-400">0%</p><p class="text-[10px] opacity-60">100% হতে হবে</p></div></div><div class="flex gap-2 mt-2"><input id="sM" type="month" value="2025-01" onchange="render()" class="bg-[#2a2a35] border rounded px-2 py-1 text-[11px] text-white"><input id="cM" type="month" value="2026-09" onchange="render()" class="bg-[#2a2a35] border rounded px-2 py-1 text-[11px] text-white"></div><div id="theory" class="card p-3 rounded-xl mt-2 text-[11px] overflow-auto"></div></div><div id="sec-members" style="display:none"><div class="card p-3 rounded-xl"><div class="flex justify-between items-center"><b>Members - Admin Share % নির্ধারণ</b><button id="addMemberBtn" data-admin-only="true" onclick="openM('mModal')" class="bg-indigo-600 px-4 py-1 rounded-full text-xs">+ Add Member + Share %</button></div><p class="text-[10px] opacity-60 mt-1">শুধু Admin Member যোগ, Edit বা Delete করতে পারবে। সাধারণ User শুধু দেখতে পারবে।</p><div id="mList" class="grid md:grid-cols-2 gap-3 mt-3"></div></div></div><div id="sec-money" style="display:none" class="card p-3 rounded-xl"><div class="flex justify-between items-center"><div><b>জমা/খরচ</b><p class="text-[10px] opacity-60">প্রতিটি transaction-এর তারিখ ও সময় সংরক্ষণ করা হয়। শুধু Admin যোগ বা Delete করতে পারবে।</p></div><button id="addTxBtn" data-admin-only="true" onclick="openTransactionModal()" class="bg-indigo-600 px-3 py-1 rounded-full text-xs">+ Add</button></div><div class="overflow-auto"><table class="w-full text-xs mt-3 min-w-[620px]"><thead><tr class="bg-[#2a2a35]"><th class="p-2 text-left">Date</th><th class="p-2 text-left">Time</th><th class="p-2 text-left">Name</th><th>Type</th><th>Amt</th><th>Del</th></tr></thead><tbody id="tBody"></tbody></table></div></div><div id="sec-intercom" style="display:none" class="card p-3 rounded-xl"><div class="flex justify-between"><b>Intercom</b><div class="flex gap-2"><button data-admin-only="true" onclick="startJitsi()" class="bg-green-600 px-3 py-1 rounded-full text-xs">Meeting</button><button data-admin-only="true" onclick="endJitsi()" class="bg-red-600 px-3 py-1 rounded-full text-xs">End</button><button data-admin-only="true" onclick="clearChat()" class="bg-[#2a2a35] border px-3 py-1 rounded-full text-xs">Clear</button></div></div><div id="jitsiBox" style="display:none;background:black;height:400px;border-radius:12px;margin-top:8px"></div><div id="chatBox" class="bg-[#12121a] h-[45vh] overflow-auto p-2 rounded-xl border mt-2"></div><div id="chatComposer" data-admin-only="true" class="flex gap-2 mt-2"><input id="chatName" placeholder="নাম" class="w-20 bg-[#2a2a35] border p-2 rounded-full text-xs text-white"><input id="chatMsg" placeholder="Message..." class="flex-1 bg-[#2a2a35] border p-2 rounded-full text-sm text-white"><button onclick="sendChat()" class="bg-indigo-600 w-10 h-10 rounded-full">➤</button></div><p id="chatReadOnlyNote" class="hidden mt-2 text-center text-[10px] text-slate-400">View only — শুধু Admin message পাঠাতে বা পরিবর্তন করতে পারবে।</p></div><div id="sec-settings" style="display:none" class="card p-3 rounded-xl"><h3 class="font-bold">Settings - Secure</h3><div id="adminPanel" style="display:none" class="bg-[#2a2a35] border border-amber-700 p-3 rounded-xl mt-3"><p class="text-xs font-bold">🔒 Password Change</p><input id="oldPass" type="password" placeholder="পুরাতন" class="w-full bg-black border p-2 rounded mt-2 text-xs text-white"><input id="newPass" type="password" placeholder="নতুন" class="w-full bg-black border p-2 rounded mt-2 text-xs text-white"><input id="confirmPass" type="password" placeholder="আবার নতুন" class="w-full bg-black border p-2 rounded mt-2 text-xs text-white"><button onclick="changePassSecure()" class="w-full bg-amber-400 text-black py-2 rounded-full text-xs font-bold mt-3">পরিবর্তন</button>
+<hr class="my-4 border-slate-600">
+<p class="text-xs font-bold">👤 User Login Settings</p>
+<input id="newUserId" autocomplete="off" placeholder="নতুন User ID" class="w-full bg-black border p-2 rounded mt-2 text-xs text-white">
+<input id="newUserPass" type="password" autocomplete="new-password" placeholder="নতুন User Password" class="w-full bg-black border p-2 rounded mt-2 text-xs text-white">
+<input id="confirmUserPass" type="password" autocomplete="new-password" placeholder="আবার User Password" class="w-full bg-black border p-2 rounded mt-2 text-xs text-white">
+<button onclick="changeUserLogin()" class="w-full bg-indigo-500 text-white py-2 rounded-full text-xs font-bold mt-3">Save User Login</button>
+<p class="mt-2 text-[9px] text-slate-400">পরিবর্তনের পর নতুন User ID ও Password ব্যবহার করে Login করতে হবে।</p></div><div id="noAdmin" class="text-center text-slate-500 p-6 text-xs">Admin Login করুন</div></div></div>
+
+<div id="mModal" style="display:none" class="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] p-3">
+<div class="bg-[#1e1e2a] p-4 rounded-xl w-full max-w-md border border-amber-600">
+<h3 class="font-bold text-center mb-2">👤 Member + Share % (Admin Only)</h3>
+<input type="hidden" id="editId">
+<input id="mName" placeholder="Name - Readh" class="w-full bg-[#2a2a35] border p-3 rounded mb-2 text-white text-sm">
+<input id="mPhone" placeholder="Phone - 01821470051" class="w-full bg-[#2a2a35] border p-3 rounded mb-2 text-white text-sm">
+<input id="mMonthly" type="number" value="3000" class="w-full bg-[#2a2a35] border p-3 rounded mb-2 text-white text-sm" placeholder="মাসিক কিস্তি">
+<div class="bg-amber-900/30 border border-amber-600 p-3 rounded-xl mb-2">
+<p class="text-[11px] font-bold text-amber-300">📊 শেয়ার % - এডমিন দ্বারা নির্ধারিত</p>
+<input id="mShare" type="number" step="0.01" placeholder="শেয়ার % - যেমন 10, 12.5, 25" class="w-full bg-black border border-amber-600 p-3 rounded mt-1 text-white text-sm font-bold">
+<p class="text-[9px] opacity-60 mt-1">সব মিলিয়ে 100% হতে হবে। যেমন 4 জন হলে প্রত্যেকে 25%</p>
+</div>
+<div class="grid grid-cols-2 gap-2 mb-2">
+<div><p class="text-[11px]">Photo</p><input type="file" accept="image/*" onchange="preview(this,'pPrev','pData')" class="w-full text-[10px]"><img id="pPrev" style="display:none" class="w-full h-20 object-cover rounded mt-1 border"><input type="hidden" id="pData"></div>
+<div><p class="text-[11px]">NID</p><input type="file" accept="image/*" onchange="preview(this,'nPrev','nData')" class="w-full text-[10px]"><img id="nPrev" style="display:none" class="w-full h-20 object-cover rounded mt-1 border"><input type="hidden" id="nData"></div>
+</div>
+<div class="flex gap-2"><button onclick="closeM('mModal')" class="flex-1 bg-[#2a2a35] py-3 rounded text-sm">Cancel</button><button onclick="saveMember()" class="flex-1 bg-amber-500 text-black py-3 rounded text-sm font-bold">Save Share %</button></div>
+<p id="saveStatus" class="text-[10px] text-center mt-2 text-amber-400"></p>
+</div>
+</div>
+
+<div id="tModal" style="display:none" class="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-3"><div class="bg-[#1e1e2a] p-4 rounded-xl w-full max-w-sm border"><h3 class="font-bold text-center mb-3">জমা / খরচ যোগ করুন</h3><label for="tMem" class="block text-[11px] mb-1">Member</label><select id="tMem" class="w-full bg-[#2a2a35] border p-2 rounded mb-2 text-white"></select><label for="tType" class="block text-[11px] mb-1">Transaction Type</label><select id="tType" class="w-full bg-[#2a2a35] border p-2 rounded mb-2 text-white"><option>জমা</option><option>খরচ</option></select><label for="tAmt" class="block text-[11px] mb-1">Amount</label><input id="tAmt" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="Amount" class="w-full bg-[#2a2a35] border p-2 rounded mb-2 text-white"><div class="grid grid-cols-2 gap-2"><div><label for="tDate" class="block text-[11px] mb-1">Date</label><input id="tDate" type="date" class="w-full bg-[#2a2a35] border p-2 rounded mb-2 text-white"></div><div><label for="tTime" class="block text-[11px] mb-1">Time</label><input id="tTime" type="time" class="w-full bg-[#2a2a35] border p-2 rounded mb-2 text-white"></div></div><p class="text-[9px] text-slate-400 mb-3">আপনি চাইলে বর্তমান তারিখ/সময় পরিবর্তন করতে পারবেন।</p><div class="flex gap-2"><button onclick="closeM('tModal')" class="flex-1 bg-[#2a2a35] py-2 rounded">Cancel</button><button onclick="addTx()" class="flex-1 bg-indigo-600 py-2 rounded">Save Transaction</button></div></div></div>
+<div id="loginModal" style="display:none" class="fixed inset-0 bg-black/80 flex items-center justify-center z-[200] p-3"><div class="bg-[#1e1e2a] p-5 rounded-xl w-full max-w-sm border border-amber-600"><h3 class="font-bold text-center">🔒 Admin Login</h3><input id="loginPass" type="password" placeholder="••••••" class="w-full bg-black border border-amber-700 p-3 rounded-xl mt-3 text-white"><div class="flex gap-2 mt-3"><button onclick="closeM('loginModal')" class="flex-1 bg-[#2a2a35] py-2 rounded-full">Cancel</button><button onclick="doLogin()" class="flex-1 bg-amber-400 text-black py-2 rounded-full font-bold">Login</button></div></div></div>
+<div id="profitModal" style="display:none" class="fixed inset-0 bg-black/80 flex items-center justify-center z-[200] p-3"><div class="bg-[#1e1e2a] p-5 rounded-xl w-full max-w-md border border-emerald-600 max-h-[80vh] overflow-auto"><h3 class="font-bold text-center">📊 লভ্যাংশ - Admin Share % অনুযায়ী</h3><div id="profitText" class="text-xs mt-3 leading-6"></div><button onclick="closeM('profitModal')" class="w-full bg-emerald-600 py-2 rounded-full mt-4 text-sm">OK</button></div></div>
+
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script><script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script><script src="https://meet.jit.si/external_api.js"></script>
+<script>
+window.reportDataState={members:false,transactions:false};
+/*
+UI authorization: ordinary users are read-only and all write functions check requireAdmin().
+IMPORTANT: localStorage/password checks alone are not a secure server-side boundary.
+For production security, use Firebase Authentication and Realtime Database Security Rules
+that allow writes only for authenticated admin accounts.
+*/
+var members=[],trans=[],chats=[];
+window.curPass='Alliance2025';
+window.curUserId=localStorage.getItem('fa_user_id')||'FriendshipUser';
+window.curUserPass=localStorage.getItem('fa_user_pass')||'Friendship2025';
+var db=null;var jitsi=null;
+try{var cfg={apiKey:"AIzaSyBdrsA6blA3uDlT4heRIlcPuWh3HnU7iK0",authDomain:"friendship-alliance-5ca0b.firebaseapp.com",databaseURL:"https://friendship-alliance-5ca0b-default-rtdb.firebaseio.com",projectId:"friendship-alliance-5ca0b",storageBucket:"friendship-alliance-5ca0b.firebasestorage.app",messagingSenderId:"484578151080",appId:"1:484578151080:web:7f376ce5758dd49b25509d"};firebase.initializeApp(cfg);db=firebase.database();db.ref('FA/settings/adminPass').on('value',function(s){if(s.val())window.curPass=s.val();});db.ref('FA/settings/userLogin').on('value',function(s){
+var value=s.val();
+if(value){
+if(value.userId)window.curUserId=String(value.userId);
+if(value.userPass)window.curUserPass=String(value.userPass);
+}
+});db.ref('FA/members').on('value',function(s){members=s.val()?Object.values(s.val()):[];window.reportDataState.members=true;render();});db.ref('FA/transactions').on('value',function(s){trans=s.val()?Object.values(s.val()):[];window.reportDataState.transactions=true;render();});db.ref('FA/intercom').on('value',function(s){chats=s.val()?Object.values(s.val()):[];renderChat();});}catch(e){console.log(e);}
+function preview(inp,prev,data){var f=inp.files[0];if(!f)return;document.getElementById('saveStatus').innerText='ছবি কম্প্রেস হচ্ছে...';var r=new FileReader();r.onload=function(e){var img=new Image();img.onload=function(){var c=document.createElement('canvas');var max=500,w=img.width,h=img.height;if(w>max||h>max){if(w>h){h=Math.round(h*max/w);w=max;}else{w=Math.round(w*max/h);h=max;}}c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);var d=c.toDataURL('image/jpeg',0.65);document.getElementById(prev).src=d;document.getElementById(prev).style.display='block';document.getElementById(data).value=d;document.getElementById('saveStatus').innerText='✅ ছবি রেডি';};img.src=e.target.result;};r.readAsDataURL(f);}
+function saveMember(){
+try{
+if(!requireAdmin('Member যোগ বা Edit'))return;
+var eid=document.getElementById('editId').value;
+var n=document.getElementById('mName').value.trim();
+var ph=document.getElementById('mPhone').value.trim();
+var mo=parseInt(document.getElementById('mMonthly').value)||3000;
+var share=parseFloat(document.getElementById('mShare').value);
+var photo=document.getElementById('pData').value||'';
+var nid=document.getElementById('nData').value||'';
+if(!n||!ph){alert('নাম ও ফোন দিন');return;}
+if(isNaN(share)){alert('শেয়ার % দিন - যেমন 10 বা 12.5');return;}
+if(share<=0 || share>100){alert('শেয়ার % 0-100 এর মধ্যে হতে হবে');return;}
+// Check total share not exceed 100
+var totOther=0;
+for(var i=0;i<members.length;i++){ if(String(members[i].id)!==String(eid)){ totOther+=parseFloat(members[i].sharePercent||0); } }
+if(totOther+share>100){ alert('মোট শেয়ার 100% এর বেশি হয়ে যাচ্ছে! এখন আছে '+totOther.toFixed(2)+'%, আপনি দিচ্ছেন '+share+'% = মোট '+(totOther+share).toFixed(2)+'%'); return; }
+document.getElementById('saveStatus').innerText='সেভ হচ্ছে...';
+var id=eid||Date.now();
+var obj={id:id,name:n,phone:ph,monthly:mo,sharePercent:share,photo:photo,nidPhoto:nid};
+if(db){
+if(eid){ db.ref('FA/members/'+eid).update({name:n,phone:ph,monthly:mo,sharePercent:share,photo:photo,nidPhoto:nid}).then(function(){ closeM('mModal'); }); }
+else{ db.ref('FA/members/'+id).set(obj).then(function(){ closeM('mModal'); }); }
+}else{ members.push(obj); render(); closeM('mModal'); }
+}catch(err){ alert('Error: '+err.message); }
+}
+function changePassSecure(){
+if(!requireAdmin('Admin Password পরিবর্তন'))return;
+var o=document.getElementById('oldPass').value;
+var n=document.getElementById('newPass').value.trim();
+var c=document.getElementById('confirmPass').value.trim();
+if(o!==window.curPass){alert('পুরাতন Password ভুল');return;}
+if(n.length<6){alert('নতুন Password কমপক্ষে 6 অক্ষরের হতে হবে');return;}
+if(n!==c){alert('নতুন Password মিলছে না');return;}
+function done(){
+window.curPass=n;
+document.getElementById('oldPass').value='';
+document.getElementById('newPass').value='';
+document.getElementById('confirmPass').value='';
+alert('✅ Admin Password পরিবর্তন হয়েছে');
+}
+if(db){db.ref('FA/settings/adminPass').set(n).then(done).catch(function(err){alert('Save failed: '+err.message);});}
+else{done();}
+}
+function addTx(){
+if(!requireAdmin('Transaction যোগ'))return;
+var amt=parseFloat(document.getElementById('tAmt').value);
+var date=document.getElementById('tDate').value;
+var time=document.getElementById('tTime').value;
+var sel=document.getElementById('tMem');
+if(!sel.options.length){alert('Member নির্বাচন করুন');return;}
+if(!Number.isFinite(amt)||amt<=0){alert('সঠিক Amount দিন');return;}
+if(!date){alert('Transaction Date দিন');return;}
+if(!time){alert('Transaction Time দিন');return;}
+var localDateTime=new Date(date+'T'+time);
+if(isNaN(localDateTime.getTime())){alert('সঠিক Date এবং Time দিন');return;}
+var id=Date.now();
+var obj={id:id,memberId:sel.value,memberName:sel.options[sel.selectedIndex].text,type:document.getElementById('tType').value,amount:Math.round(amt*100)/100,transactionDate:date,transactionTime:time,transactionTimestamp:localDateTime.getTime(),createdAt:id};
+function saved(){
+document.getElementById('tAmt').value='';
+closeM('tModal');
+}
+if(db){
+db.ref('FA/transactions/'+id).set(obj).then(saved).catch(function(err){alert('Transaction save failed: '+err.message);});
+}else{
+trans.push(obj);render();saved();
+}
+}
+function deleteTx(id){
+if(!requireAdmin('Transaction Delete'))return;
+if(!confirm('Delete?'))return;
+if(db){db.ref('FA/transactions/'+id).remove();}
+else{trans=trans.filter(function(t){return String(t.id)!==String(id);});render();}
+}
+function mDiff(s,e){var a=s.split('-'),b=e.split('-');return (parseInt(b[0])-parseInt(a[0]))*12+(parseInt(b[1])-parseInt(a[1]))+1;}
+function calc(m){var paid=0;for(var i=0;i<trans.length;i++){ if(String(trans[i].memberId)===String(m.id) && trans[i].type==='জমা') paid+=trans[i].amount; }var mo=m.monthly||3000;var sM=document.getElementById('sM').value||'2026-01';var cM=document.getElementById('cM').value||'2026-09';var tot=mDiff(sM,cM);var paidMonths=Math.floor(paid/mo);var rem=paid%mo;var dueM=0,advM=0,dueA=0,advA=0,st='';if(paidMonths>=tot){advM=paidMonths-tot;advA=advM*mo+rem;st='advance';}else{dueM=tot-paidMonths;if(rem>0){dueM=dueM-1;dueA=dueM*mo+(mo-rem);if(dueA<0){dueA=0;dueM=0;advA=rem;st='advance';}else st='due';}else{dueA=dueM*mo;st='due';}if(paidMonths===tot&&rem===0)st='clear';}return{paid:paid,monthly:mo,tot:tot,paidMonths:paidMonths,remainingCash:rem,dueMonths:dueM,advanceMonths:advM,dueAmt:dueA,advanceAmt:advA,status:st};}
+function sendChat(){if(!requireAdmin('Message পাঠানো'))return;var name=document.getElementById('chatName').value.trim()||'Admin';var msg=document.getElementById('chatMsg').value.trim();if(!msg)return;var id=Date.now();if(db)db.ref('FA/intercom/'+id).set({id:id,name:name,msg:msg});document.getElementById('chatMsg').value='';}
+function clearChat(){if(!requireAdmin('Chat Clear'))return;if(confirm('Clear?')&&db)db.ref('FA/intercom').remove();}
+function startJitsi(){if(!requireAdmin('Meeting শুরু'))return;var box=document.getElementById('jitsiBox');box.style.display='block';box.innerHTML='';var opts={roomName:'FriendshipAlliance_'+Date.now(),width:'100%',height:400,parentNode:box,userInfo:{displayName:document.getElementById('chatName').value||'Admin'}};jitsi=new JitsiMeetExternalAPI('meet.jit.si',opts);}
+function endJitsi(){if(!requireAdmin('Meeting শেষ'))return;if(jitsi)jitsi.dispose();document.getElementById('jitsiBox').style.display='none';}
+function renderChat(){var box=document.getElementById('chatBox');if(!box)return;var arr=chats.slice().sort(function(a,b){return a.id-b.id;}).slice(-50);var h='';for(var i=0;i<arr.length;i++){h+='<div class="bg-[#2a2a35] p-2 rounded-xl text-xs mb-1"><b>'+arr[i].name+':</b> '+arr[i].msg+'</div>';}box.innerHTML=h||'<p class="text-slate-500 text-xs text-center">No messages</p>';}
+function deleteMember(id){
+if(!requireAdmin('Member Delete'))return;
+if(!confirm('Delete?'))return;
+if(db){db.ref('FA/members/'+id).remove();}
+else{members=members.filter(function(m){return String(m.id)!==String(id);});render();}
+}
+function render(){
+var totJ=0; for(var i=0;i<trans.length;i++){ if(trans[i].type==='জমা') totJ+=trans[i].amount; }
+var totDue=0,totDueM=0; var totShare=0; var list=[];
+for(var j=0;j<members.length;j++){ var cc=calc(members[j]); totShare+=parseFloat(members[j].sharePercent||0); if(cc.status==='due'){ totDue+=cc.dueAmt; totDueM+=cc.dueMonths; } list.push({m:members[j],c:cc}); }
+document.getElementById('dM').innerText=members.length; document.getElementById('dJ').innerText='৳'+totJ; document.getElementById('dShare').innerText=totShare.toFixed(2)+'%';
+document.getElementById('dShare').className= totShare>100? 'text-2xl font-bold text-red-400' : totShare===100? 'text-2xl font-bold text-emerald-400' : 'text-2xl font-bold text-amber-400';
+var th='<table class="w-full text-[11px]"><tr class="bg-[#2a2a35]"><th class="p-2 text-left">নাম</th><th>শেয়ার % (Admin)</th><th>জমা</th><th>অবস্থা</th></tr>';
+for(var k=0;k<list.length;k++){ var x=list[k]; var badge=x.c.status==='clear'?'<span class="bg-emerald-600 px-2 py-1 rounded-full text-[10px]">✅ Clear</span>':x.c.status==='advance'?'<span class="bg-blue-600 px-2 py-1 rounded-full text-[10px]">🟢 অগ্রিম '+x.c.advanceMonths+'ম</span>':'<span class="bg-red-600 px-2 py-1 rounded-full text-[10px]">🔴 বকেয়া '+x.c.dueMonths+'ম</span>'; th+='<tr class="border-t border-slate-700"><td class="p-2 font-bold">'+x.m.name+'</td><td class="font-bold text-amber-300">'+(x.m.sharePercent||0)+'%</td><td>৳'+x.c.paid+'</td><td>'+badge+'</td></tr>'; } th+='</table>';
+document.getElementById('theory').innerHTML=th;
+var mHtml='';
+for(var l=0;l<list.length;l++){
+var mem=list[l].m; var du=list[l].c;
+var ph=mem.photo?'<img src="'+mem.photo+'" class="w-12 h-12 rounded-full object-cover border">':'<div class="w-12 h-12 rounded-full bg-slate-600 flex items-center justify-center text-[9px]">No</div>';
+var detail=du.status==='clear'?'<p class="text-emerald-400 text-[11px]">✅ Clear - '+du.paidMonths+' মাস</p>':du.status==='advance'?'<p class="text-blue-400 text-[11px]">🟢 অগ্রিম: '+du.advanceMonths+' মাস = ৳'+du.advanceAmt+'</p>':'<p class="text-red-400 text-[11px]">🔴 বকেয়া: '+du.dueMonths+' মাস = ৳'+du.dueAmt+'</p>';
+var shareLine='<div class="bg-amber-900/40 border border-amber-600 rounded-lg p-2 mt-2"><p class="text-amber-300 font-bold text-[13px]">📊 শেয়ার: '+(mem.sharePercent||0)+'%</p><p class="text-[10px] opacity-70">এডমিন দ্বারা নির্ধারিত</p></div>';
+var wa=isAdmin()&&du.status==='due'?'<button onclick="whatsappReminder(\''+mem.phone+'\',\''+mem.name+'\',\''+du.dueMonths+'\',\''+du.dueAmt+'\')" class="bg-green-600 text-white text-[10px] px-3 py-1 rounded-full">💬 WhatsApp</button>':'';
+var adminActions=isAdmin()?'<button onclick="editMember(\''+mem.id+'\')" class="bg-blue-600 text-white text-[10px] px-3 py-1 rounded-full">✏️ Edit Share %</button><button onclick="deleteMember(\''+mem.id+'\')" class="bg-red-600 text-white text-[10px] px-2 py-1 rounded-full">Del</button>':'';
+mHtml+='<div class="card p-3 rounded-xl"><div class="flex gap-3"><div>'+ph+'</div><div class="flex-1"><p class="font-bold text-xs">'+mem.name+' <span class="text-[10px] opacity-60">'+mem.phone+'</span></p>'+detail+shareLine+'<div class="flex gap-1 mt-2 flex-wrap">'+wa+adminActions+'</div></div></div></div>';
+}
+document.getElementById('mList').innerHTML=mHtml||'<p class="text-slate-500 text-xs">Admin Login করে Member + Share % যোগ করুন</p>';
+var opts=''; for(var m=0;m<members.length;m++){ opts+='<option value="'+members[m].id+'">'+members[m].name+'</option>'; } var tm=document.getElementById('tMem'); if(tm) tm.innerHTML=opts;
+var tHtml=''; var last=trans.slice().sort(function(a,b){return txSortValue(b)-txSortValue(a);}).slice(0,50); for(var t=0;t<last.length;t++){ var txDate=txDateValue(last[t])||'—';var txTime=txTimeValue(last[t])||'—';var deleteButton=isAdmin()?'<button onclick="deleteTx(\''+last[t].id+'\')" class="bg-red-600 px-2 py-1 rounded-full text-[10px]">Del</button>':'<span class="text-slate-500">View</span>';tHtml+='<tr class="border-t border-slate-700"><td class="p-2 whitespace-nowrap">'+txDate+'</td><td class="p-2 whitespace-nowrap">'+txTime+'</td><td class="p-2">'+(last[t].memberName||'')+'</td><td>'+last[t].type+'</td><td>৳'+Number(last[t].amount||0).toLocaleString('en-US')+'</td><td>'+deleteButton+'</td></tr>'; } document.getElementById('tBody').innerHTML=tHtml||'<tr><td colspan="6" class="p-4 text-center text-slate-500">No transactions</td></tr>';
+var adminMode=isAdmin();
+document.querySelectorAll('[data-admin-only="true"]').forEach(function(el){el.style.display=adminMode?'':'none';});
+var readOnlyNote=document.getElementById('chatReadOnlyNote');if(readOnlyNote)readOnlyNote.classList.toggle('hidden',adminMode);
+if(adminMode){
+document.getElementById('roleBadge').innerText='Admin';
+document.getElementById('roleBadge').className='bg-emerald-400 text-black px-2 py-1 rounded-full text-[10px] font-bold';
+document.getElementById('adminPanel').style.display='block';
+document.getElementById('noAdmin').style.display='none';
+document.getElementById('logoutBtn').classList.remove('hidden');
+document.getElementById('loginBtn').classList.add('hidden');
+document.getElementById('newUserId').value=window.curUserId;
+}else{
+document.getElementById('roleBadge').innerText='User';
+document.getElementById('roleBadge').className='bg-white/20 px-2 py-1 rounded-full text-[9px]';
+document.getElementById('adminPanel').style.display='none';
+document.getElementById('noAdmin').style.display='block';
+document.getElementById('logoutBtn').classList.add('hidden');
+document.getElementById('loginBtn').classList.remove('hidden');
+}
+}
+document.addEventListener('DOMContentLoaded',function(){
+applyTheme(localStorage.getItem('theme')||'dark');
+if(localStorage.getItem('fa_user')==='true'){unlockDashboard();}
+else{showUserLogin('');}
+render();
+});
+</script>
+</body>
+</html>
